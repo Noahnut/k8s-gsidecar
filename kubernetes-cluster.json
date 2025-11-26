@@ -1,0 +1,58 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "content": "# Kubernetes Cluster Overview\n\nThis is an example dashboard loaded via k8s-gsidecar.\n\n**Dashboard Name:** `kubernetes-cluster`\n\n**Loaded at:** `2025-11-24 21:52:18`",
+        "mode": "markdown"
+      },
+      "pluginVersion": "10.2.0",
+      "title": "Kubernetes Cluster Overview",
+      "type": "text"
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["k8s-gsidecar", "demo"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Kubernetes Cluster Overview",
+  "uid": "kubernetes-cluster",
+  "version": 1
+}

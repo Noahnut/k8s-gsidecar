@@ -1,0 +1,13 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.coverprofile
+*.coverage
+*.coverage.html
+*.coverage.out
+*.coverage.json
+*.coverage.xml
+*.coverage.txt

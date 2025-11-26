@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+k8s-gsidecar
+k8s-gsidecar-*
+coverage.out
+coverage.html
+
+# Test
+*.test
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docker
+docker/
+Dockerfile
+.dockerignore
+
+# Kubernetes
+k8s/
+*.yaml
+*.yml
+!go.yaml
+
+# Misc
+tmp/
+temp/
+.DS_Store
+
