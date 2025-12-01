@@ -153,6 +153,8 @@ func (s *SideCar) Run() {
 	switch s.Method {
 	case METHOD_WATCH, METHOD_SLEEP:
 		log.Println("Waiting for changes")
+		s.syncResources()
+
 		s.WaitForChanges()
 	case METHOD_LIST:
 		log.Println("Running once")
