@@ -15,7 +15,7 @@ func NewFileWriter() *FileWriter {
 
 func (f *FileWriter) Init(folder string) {
 	if _, err := os.Stat(folder); os.IsNotExist(err) {
-		os.Mkdir(folder, 0755)
+		os.MkdirAll(folder, 0755)
 	}
 }
 
