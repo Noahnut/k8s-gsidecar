@@ -7,23 +7,28 @@ import (
 )
 
 type FileWriter struct {
-	folder string
 }
 
-func NewFileWriter(folder string) *FileWriter {
+func NewFileWriter() *FileWriter {
+	return &FileWriter{}
+}
 
-	return &FileWriter{
-		folder: folder,
+func (f *FileWriter) Init(folder string) {
+	if _, err := os.Stat(folder); os.IsNotExist(err) {
+		os.Mkdir(folder, 0755)
 	}
 }
 
-func (f *FileWriter) Write(fileName string, data string) error {
-	filePath := path.Join(f.folder, fileName)
+func (f *FileWriter) Write(folder string, fileName string, data string) error {
+	f.Init(folder)
+	filePath := path.Join(folder, fileName)
+
 	return os.WriteFile(filePath, []byte(data), 0644)
 }
 
-func (f *FileWriter) Remove(fileName string) error {
-	filePath := path.Join(f.folder, fileName)
+func (f *FileWriter) Remove(folder string, fileName string) error {
+	f.Init(folder)
+	filePath := path.Join(folder, fileName)
 	return os.Remove(filePath)
 }
 

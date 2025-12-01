@@ -7,6 +7,7 @@ import (
 	"k8s-gsidecar/writer"
 	"log"
 	"os"
+	"path"
 	"strings"
 	"sync"
 )
@@ -42,6 +43,10 @@ const (
 	RESOURCE_ALL       string = "both"
 	RESOURCE_CONFIGMAP string = "configmap"
 	RESOURCE_SECRET    string = "secret"
+)
+
+const (
+	DEFAULT_FOLDER_ANNOTATION = "k8s-sidecar-target-directory"
 )
 
 type SideCar struct {
@@ -82,6 +87,7 @@ func New(ctx context.Context) *SideCar {
 	reqPayload := os.Getenv(REQ_PAYLOAD)
 	reqUsername := os.Getenv(REQ_USERNAME)
 	reqPassword := os.Getenv(REQ_PASSWORD)
+	folderAnnotation := os.Getenv(FOLDER_ANNOTATION)
 	resources := []string{}
 	switch resouce {
 	case RESOURCE_ALL:
@@ -95,7 +101,7 @@ func New(ctx context.Context) *SideCar {
 		Username: reqUsername,
 		Password: reqPassword,
 	}
-	fw := writer.NewFileWriter(os.Getenv(FOLDER))
+	fw := writer.NewFileWriter()
 
 	notifier := notifier.NewHTTPNotifier(
 		reqURL,
@@ -112,6 +118,10 @@ func New(ctx context.Context) *SideCar {
 		namespaces = strings.Split(namesapces_env, ",")
 	}
 
+	if folderAnnotation == "" {
+		folderAnnotation = DEFAULT_FOLDER_ANNOTATION
+	}
+
 	return &SideCar{
 		ctx:                    ctx,
 		client:                 client,
@@ -121,7 +131,7 @@ func New(ctx context.Context) *SideCar {
 		Method:                 strings.ToLower(os.Getenv(METHOD)),
 		UniqueFilenames:        os.Getenv(UNIQUE_FILENAMES),
 		Folder:                 os.Getenv(FOLDER),
-		FolderAnnotation:       os.Getenv(FOLDER_ANNOTATION),
+		FolderAnnotation:       folderAnnotation,
 		Label:                  os.Getenv(LABEL),
 		LabelValue:             os.Getenv(LABEL_VALUE),
 		Resource:               resources,
@@ -166,7 +176,14 @@ func (s *SideCar) syncResources() {
 					if !s.writer.IsJSON(fileName) {
 						continue
 					}
-					err = s.writer.Write(fileName, data)
+
+					folder := s.Folder
+
+					if s.FolderAnnotation != "" {
+						folder = path.Join(s.Folder, configMap.Annotations[s.FolderAnnotation])
+					}
+
+					err = s.writer.Write(folder, fileName, data)
 					if err != nil {
 						log.Fatalf("Failed to write file: %v", err)
 					}
@@ -184,8 +201,15 @@ func (s *SideCar) syncResources() {
 					if !s.writer.IsJSON(fileName) {
 						continue
 					}
+
+					folder := s.Folder
+
+					if s.FolderAnnotation != "" {
+						folder = path.Join(s.Folder, secret.Annotations[s.FolderAnnotation])
+					}
+
 					// Secret.Data is []byte, convert to string
-					err = s.writer.Write(fileName, string(data))
+					err = s.writer.Write(folder, fileName, string(data))
 					if err != nil {
 						log.Fatalf("Failed to write file: %v", err)
 					}
@@ -216,6 +240,8 @@ func (s *SideCar) WaitForChanges() {
 				s.Namespaces,
 				s.Label,
 				s.LabelValue,
+				s.Folder,
+				s.FolderAnnotation,
 				s.writer,
 				s.notifier,
 			)
@@ -225,6 +251,8 @@ func (s *SideCar) WaitForChanges() {
 				s.Namespaces,
 				s.Label,
 				s.LabelValue,
+				s.Folder,
+				s.FolderAnnotation,
 				s.writer,
 				s.notifier,
 			)

@@ -225,6 +225,7 @@ func TestGrafanaDashboardSidecar(t *testing.T) {
 			os.Setenv(RESOURCE, RESOURCE_CONFIGMAP)
 			os.Setenv(METHOD, "list")
 			os.Setenv(FOLDER, testFolder)
+			os.Setenv(FOLDER_ANNOTATION, "")
 			os.MkdirAll(testFolder, 0755)
 			defer os.RemoveAll(testFolder)
 
@@ -284,13 +285,15 @@ func TestGrafanaDashboardSidecar(t *testing.T) {
 					Ctx:    ctx,
 					Client: fakeClientset,
 				},
-				writer:               writer.NewFileWriter(testFolder),
+				writer:               writer.NewFileWriter(),
 				notifier:             notifier.NewHTTPNotifier(mockServer.URL, tt.notifyMethod, basicAuth, `{"message":"dashboards updated"}`),
 				Namespaces:           []string{"monitoring"},
 				Label:                tt.label,
 				LabelValue:           tt.labelValue,
 				Resource:             []string{RESOURCE_CONFIGMAP},
 				ReqURL:               mockServer.URL,
+				Folder:               testFolder,
+				FolderAnnotation:     "",
 				ReqMethod:            tt.notifyMethod,
 				ReqBasicAuthUsername: tt.username,
 				ReqBasicAuthPassword: tt.password,
@@ -404,13 +407,15 @@ func TestGrafanaDashboardSidecar_LabelSelector(t *testing.T) {
 			Ctx:    ctx,
 			Client: fakeClientset,
 		},
-		writer:     writer.NewFileWriter(testFolder),
-		notifier:   notifier.NewHTTPNotifier(mockServer.URL, "GET", nil, `{"message":"dashboards updated"}`),
-		Namespaces: []string{"monitoring"},
-		Label:      "grafana_dashboard",
-		LabelValue: "1",
-		Resource:   []string{RESOURCE_CONFIGMAP},
-		ReqPayload: `{}`,
+		writer:           writer.NewFileWriter(),
+		notifier:         notifier.NewHTTPNotifier(mockServer.URL, "GET", nil, `{"message":"dashboards updated"}`),
+		Namespaces:       []string{"monitoring"},
+		Label:            "grafana_dashboard",
+		LabelValue:       "1",
+		Folder:           "test-label-selector",
+		FolderAnnotation: "",
+		Resource:         []string{RESOURCE_CONFIGMAP},
+		ReqPayload:       `{}`,
 	}
 
 	sideCar.RunOnce()
@@ -427,6 +432,75 @@ func TestGrafanaDashboardSidecar_LabelSelector(t *testing.T) {
 	// config.yaml should not be written (not a JSON file)
 	if _, err := os.Stat(testFolder + "/config.yaml"); err == nil {
 		t.Error("Expected config.yaml to NOT exist")
+	}
+}
+
+// TestSideCar_FolderAnnotation test folder annotation functionality
+func TestSideCar_FolderAnnotation(t *testing.T) {
+	testFolder := "test-folder-annotation"
+	os.MkdirAll(testFolder, 0755)
+	defer os.RemoveAll(testFolder)
+
+	// create ConfigMap with folder annotation
+	fakeClientset := fake.NewSimpleClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "annotation-dashboard",
+				Namespace: "monitoring",
+				Labels: map[string]string{
+					"grafana_dashboard": "1",
+				},
+				Annotations: map[string]string{
+					"target-folder": "subfolder",
+				},
+			},
+			Data: map[string]string{
+				"dashboard.json": `{"dashboard": {"title": "Annotation Dashboard"}}`,
+			},
+		},
+	)
+
+	ctx := context.Background()
+
+	// Mock HTTP server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockServer.Close()
+
+	sideCar := &SideCar{
+		ctx: ctx,
+		client: &kubernetes.Client{
+			Ctx:    ctx,
+			Client: fakeClientset,
+		},
+		writer:           writer.NewFileWriter(),
+		notifier:         notifier.NewHTTPNotifier(mockServer.URL, "GET", nil, `{"message":"dashboards updated"}`),
+		Namespaces:       []string{"monitoring"},
+		Label:            "grafana_dashboard",
+		LabelValue:       "1",
+		Folder:           testFolder,
+		FolderAnnotation: "target-folder",
+		Resource:         []string{RESOURCE_CONFIGMAP},
+		ReqPayload:       `{}`,
+	}
+
+	sideCar.RunOnce()
+
+	// should write to subfolder
+	expectedPath := testFolder + "/subfolder/dashboard.json"
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Errorf("Expected file '%s' to exist", expectedPath)
+	}
+
+	// verify content
+	content, err := os.ReadFile(expectedPath)
+	if err != nil {
+		t.Fatalf("Failed to read file '%s': %v", expectedPath, err)
+	}
+
+	if string(content) != `{"dashboard": {"title": "Annotation Dashboard"}}` {
+		t.Errorf("Expected content to match, got %s", string(content))
 	}
 }
 
@@ -466,7 +540,7 @@ func TestGrafanaDashboardSidecar_NotifierFailure(t *testing.T) {
 			Ctx:    ctx,
 			Client: fakeClientset,
 		},
-		writer:     writer.NewFileWriter(testFolder),
+		writer:     writer.NewFileWriter(),
 		notifier:   notifier.NewHTTPNotifier(mockServer.URL, "POST", nil, `{"message":"dashboards updated"}`),
 		Namespaces: []string{"monitoring"},
 		Label:      "grafana_dashboard",
@@ -501,7 +575,7 @@ func NewMockWriter() *MockWriter {
 	}
 }
 
-func (m *MockWriter) Write(fileName string, data string) error {
+func (m *MockWriter) Write(folder string, fileName string, data string) error {
 	if m.WriteError != nil {
 		return m.WriteError
 	}
@@ -509,7 +583,7 @@ func (m *MockWriter) Write(fileName string, data string) error {
 	return nil
 }
 
-func (m *MockWriter) Remove(fileName string) error {
+func (m *MockWriter) Remove(folder string, fileName string) error {
 	if m.RemoveError != nil {
 		return m.RemoveError
 	}
@@ -1400,6 +1474,8 @@ func TestWaitForChanges_SecretAdd(t *testing.T) {
 		[]string{"default"},
 		"app",
 		"test",
+		"",
+		"",
 		mockWriter,
 		mockNotifier,
 	)
@@ -1484,6 +1560,8 @@ func TestWaitForChanges_SecretUpdate(t *testing.T) {
 		[]string{"default"},
 		"app",
 		"test",
+		"",
+		"",
 		mockWriter,
 		mockNotifier,
 	)
@@ -1548,6 +1626,8 @@ func TestWaitForChanges_SecretDelete(t *testing.T) {
 		[]string{"default"},
 		"app",
 		"test",
+		"",
+		"",
 		mockWriter,
 		mockNotifier,
 	)
@@ -1594,6 +1674,8 @@ func TestWaitForChanges_SecretLabelSelector(t *testing.T) {
 		[]string{"default"},
 		"app",
 		"grafana",
+		"",
+		"",
 		mockWriter,
 		mockNotifier,
 	)
@@ -1686,6 +1768,8 @@ func TestWaitForChanges_SecretNonJSONFilesIgnored(t *testing.T) {
 		[]string{"default"},
 		"app",
 		"test",
+		"",
+		"",
 		mockWriter,
 		mockNotifier,
 	)
@@ -1877,6 +1961,8 @@ func TestWaitForChanges_SecretAllNamespaces(t *testing.T) {
 		[]string{},
 		"app",
 		"test",
+		"",
+		"",
 		mockWriter,
 		mockNotifier,
 	)

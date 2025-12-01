@@ -8,6 +8,7 @@ import (
 	"k8s-gsidecar/writer"
 	"log"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -145,16 +146,18 @@ func (c *Client) ConfigMapInformerWorker(
 	namespaces []string,
 	label string,
 	labelValue string,
+	folder string,
+	folderAnnotation string,
 	writer writer.IWriter,
 	notifier notifier.INotifier,
 ) {
 
 	// event driven worker
 	if len(namespaces) == 0 {
-		c.configMapInformerWorker(nil, label, labelValue, writer, notifier)
+		c.configMapInformerWorker(nil, label, labelValue, folder, folderAnnotation, writer, notifier)
 	} else {
 		for _, namespace := range namespaces {
-			c.configMapInformerWorker(&namespace, label, labelValue, writer, notifier)
+			c.configMapInformerWorker(&namespace, label, labelValue, folder, folderAnnotation, writer, notifier)
 		}
 	}
 
@@ -166,14 +169,16 @@ func (c *Client) SecretInformerWorker(
 	namespaces []string,
 	label string,
 	labelValue string,
+	folder string,
+	folderAnnotation string,
 	writer writer.IWriter,
 	notifier notifier.INotifier,
 ) {
 	if len(namespaces) == 0 {
-		c.secretInformerWorker(nil, label, labelValue, writer, notifier)
+		c.secretInformerWorker(nil, label, labelValue, folder, folderAnnotation, writer, notifier)
 	} else {
 		for _, namespace := range namespaces {
-			c.secretInformerWorker(&namespace, label, labelValue, writer, notifier)
+			c.secretInformerWorker(&namespace, label, labelValue, folder, folderAnnotation, writer, notifier)
 		}
 	}
 
@@ -206,6 +211,8 @@ func (c *Client) configMapInformerWorker(
 	namespace *string,
 	label string,
 	labelValue string,
+	folder string,
+	folderAnnotation string,
 	writer writer.IWriter,
 	notifier notifier.INotifier,
 ) {
@@ -252,7 +259,14 @@ func (c *Client) configMapInformerWorker(
 				if !writer.IsJSON(fileName) {
 					continue
 				}
-				writer.Write(fileName, data)
+
+				folder := folder
+
+				if folderAnnotation != "" {
+					folder = path.Join(folder, cm.Annotations[folderAnnotation])
+				}
+
+				writer.Write(folder, fileName, data)
 			}
 			notifier.Notify()
 		},
@@ -268,7 +282,14 @@ func (c *Client) configMapInformerWorker(
 				if !writer.IsJSON(fileName) {
 					continue
 				}
-				writer.Write(fileName, data)
+
+				folder := folder
+
+				if folderAnnotation != "" {
+					folder = path.Join(folder, cm.Annotations[folderAnnotation])
+				}
+
+				writer.Write(folder, fileName, data)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -283,7 +304,14 @@ func (c *Client) configMapInformerWorker(
 				if !writer.IsJSON(fileName) {
 					continue
 				}
-				writer.Remove(fileName)
+
+				folder := folder
+
+				if folderAnnotation != "" {
+					folder = path.Join(folder, cm.Annotations[folderAnnotation])
+				}
+
+				writer.Remove(folder, fileName)
 			}
 		},
 	})
@@ -296,6 +324,8 @@ func (c *Client) secretInformerWorker(
 	namespace *string,
 	label string,
 	labelValue string,
+	folder string,
+	folderAnnotation string,
 	writer writer.IWriter,
 	notifier notifier.INotifier,
 ) {
@@ -340,7 +370,14 @@ func (c *Client) secretInformerWorker(
 				if !writer.IsJSON(fileName) {
 					continue
 				}
-				writer.Write(fileName, string(data))
+
+				folder := folder
+
+				if folderAnnotation != "" {
+					folder = path.Join(folder, secret.Annotations[folderAnnotation])
+				}
+
+				writer.Write(folder, fileName, string(data))
 			}
 			notifier.Notify()
 		},
@@ -355,7 +392,14 @@ func (c *Client) secretInformerWorker(
 				if !writer.IsJSON(fileName) {
 					continue
 				}
-				writer.Write(fileName, string(data))
+
+				folder := folder
+
+				if folderAnnotation != "" {
+					folder = path.Join(folder, secret.Annotations[folderAnnotation])
+				}
+
+				writer.Write(folder, fileName, string(data))
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -368,7 +412,14 @@ func (c *Client) secretInformerWorker(
 				if !writer.IsJSON(fileName) {
 					continue
 				}
-				writer.Remove(fileName)
+
+				folder := folder
+
+				if folderAnnotation != "" {
+					folder = path.Join(folder, secret.Annotations[folderAnnotation])
+				}
+
+				writer.Remove(folder, fileName)
 			}
 		},
 	})
