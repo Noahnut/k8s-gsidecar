@@ -165,10 +165,13 @@ func (s *SideCar) Run() {
 }
 
 func (s *SideCar) syncResources() {
+	log.Println("Syncing resources")
 	for _, resource := range s.Resource {
+		log.Println("Syncing resource:", resource)
 		switch resource {
 		case RESOURCE_CONFIGMAP:
 			configMaps, err := s.client.GetConfigMaps(s.Namespaces, s.Label, s.LabelValue)
+			log.Println("Got ConfigMaps:", len(configMaps))
 			if err != nil {
 				log.Fatalf("Failed to get ConfigMaps: %v", err)
 			}
@@ -194,6 +197,7 @@ func (s *SideCar) syncResources() {
 
 		case RESOURCE_SECRET:
 			secrets, err := s.client.GetSecrets(s.Namespaces, s.Label, s.LabelValue)
+			log.Println("Got Secrets:", len(secrets))
 			if err != nil {
 				log.Fatalf("Failed to get Secrets: %v", err)
 			}
