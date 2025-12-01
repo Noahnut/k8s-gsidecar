@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"k8s-gsidecar/kubernetes"
 	"k8s-gsidecar/notifier"
 	"k8s-gsidecar/writer"
@@ -142,12 +141,14 @@ func New(ctx context.Context) *SideCar {
 func (s *SideCar) Run() {
 	log.Println("Running SideCar with method:", s.Method)
 	switch s.Method {
-	case METHOD_WATCH, METHOD_LIST:
+	case METHOD_WATCH, METHOD_SLEEP:
 		log.Println("Waiting for changes")
 		s.WaitForChanges()
-	default:
+	case METHOD_LIST:
 		log.Println("Running once")
 		s.RunOnce()
+	default:
+		log.Fatalf("Invalid method: %s", s.Method)
 	}
 }
 
@@ -173,7 +174,6 @@ func (s *SideCar) syncResources() {
 			}
 
 		case RESOURCE_SECRET:
-			fmt.Println(s.Namespaces, s.Label, s.LabelValue)
 			secrets, err := s.client.GetSecrets(s.Namespaces, s.Label, s.LabelValue)
 			if err != nil {
 				log.Fatalf("Failed to get Secrets: %v", err)
