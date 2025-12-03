@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
-	"log"
+	"k8s-gsidecar/logger"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
+var l *slog.Logger = logger.GetLogger()
+
 func main() {
+
+	l.Info("Starting SideCar")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -17,13 +23,13 @@ func main() {
 	go func() {
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
-		log.Println("Received signal to exit, cancelling context")
+		l.Info("Received signal to exit, cancelling context")
 		cancel()
 	}()
 
 	sideCar := New(ctx)
-	log.Println("Running SideCar")
+	l.Info("Running SideCar")
 	sideCar.Run()
 
-	log.Println("SideCar exited")
+	l.Info("SideCar exited")
 }

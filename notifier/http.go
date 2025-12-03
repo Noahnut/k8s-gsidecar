@@ -3,8 +3,12 @@ package notifier
 import (
 	"bytes"
 	"fmt"
+	"k8s-gsidecar/logger"
+	"log/slog"
 	"net/http"
 )
+
+var l *slog.Logger = logger.GetLogger()
 
 type BasicAuth struct {
 	Username string
@@ -43,6 +47,7 @@ func (n *HTTPNotifier) Notify() error {
 
 	req, err := http.NewRequest(httpMethodName, n.URL, bytes.NewBufferString(n.Payload))
 	if err != nil {
+		l.Error("Failed to create HTTP request", "error", err)
 		return err
 	}
 
@@ -58,6 +63,7 @@ func (n *HTTPNotifier) Notify() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		l.Error("Failed to notify", "status", resp.Status)
 		return fmt.Errorf("failed to notify: %s", resp.Status)
 	}
 

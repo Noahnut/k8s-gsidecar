@@ -4,9 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"k8s-gsidecar/logger"
 	"k8s-gsidecar/notifier"
 	"k8s-gsidecar/writer"
-	"log"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -21,6 +22,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+var l *slog.Logger = logger.GetLogger()
+
 type Client struct {
 	Ctx    context.Context
 	Client kubernetes.Interface
@@ -33,7 +36,7 @@ func NewClient(ctx context.Context) (*Client, error) {
 		client, err = kubernetes.NewForConfig(cfg)
 
 		if err != nil {
-			log.Fatalf("Failed to create Kubernetes client: %v", err)
+			l.Error("Failed to create Kubernetes client", "error", err)
 		}
 
 		return &Client{
@@ -87,12 +90,14 @@ func (c *Client) GetConfigMaps(
 	var allConfigMaps []corev1.ConfigMap
 
 	if len(namespaces) == 0 {
+		l.Debug("Getting all configmaps")
 		configMaps, err := c.Client.CoreV1().ConfigMaps(metav1.NamespaceAll).List(c.Ctx, configMapOpt)
 		if err != nil {
 			return nil, err
 		}
 		allConfigMaps = append(allConfigMaps, configMaps.Items...)
 	} else {
+		l.Debug("Getting configmaps for namespaces", "namespaces", namespaces)
 		for _, namespace := range namespaces {
 			configMaps, err := c.Client.CoreV1().ConfigMaps(namespace).List(c.Ctx, configMapOpt)
 			if err != nil {
@@ -124,12 +129,14 @@ func (c *Client) GetSecrets(
 	var allSecrets []corev1.Secret
 
 	if len(namespaces) == 0 {
+		l.Debug("Getting all secrets")
 		secrets, err := c.Client.CoreV1().Secrets(metav1.NamespaceAll).List(c.Ctx, secretOpt)
 		if err != nil {
 			return nil, err
 		}
 		allSecrets = append(allSecrets, secrets.Items...)
 	} else {
+		l.Debug("Getting secrets for namespaces", "namespaces", namespaces)
 		for _, namespace := range namespaces {
 			secrets, err := c.Client.CoreV1().Secrets(namespace).List(c.Ctx, secretOpt)
 			if err != nil {
@@ -154,9 +161,11 @@ func (c *Client) ConfigMapInformerWorker(
 
 	// event driven worker
 	if len(namespaces) == 0 {
+		l.Debug("Start waiting for changes for all namespaces")
 		c.configMapInformerWorker(nil, label, labelValue, folder, folderAnnotation, writer, notifier)
 	} else {
 		for _, namespace := range namespaces {
+			l.Debug("Start waiting for changes for namespace:", "namespace", namespace)
 			c.configMapInformerWorker(&namespace, label, labelValue, folder, folderAnnotation, writer, notifier)
 		}
 	}
@@ -175,9 +184,11 @@ func (c *Client) SecretInformerWorker(
 	notifier notifier.INotifier,
 ) {
 	if len(namespaces) == 0 {
+		l.Debug("Start waiting for changes for all namespaces")
 		c.secretInformerWorker(nil, label, labelValue, folder, folderAnnotation, writer, notifier)
 	} else {
 		for _, namespace := range namespaces {
+			l.Debug("Start waiting for changes for namespace:", "namespace", namespace)
 			c.secretInformerWorker(&namespace, label, labelValue, folder, folderAnnotation, writer, notifier)
 		}
 	}
@@ -248,24 +259,28 @@ func (c *Client) configMapInformerWorker(
 
 	cmInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			l.Debug("ConfigMap added:", "name", obj.(*corev1.ConfigMap).Name)
 			cm := obj.(*corev1.ConfigMap)
 
 			if !c.matchesLabel(cm.Labels, label, labelValue) {
-				log.Printf("ConfigMap %s does not match label %s=%s", cm.Name, label, labelValue)
+				l.Debug("ConfigMap does not match label:", "name", cm.Name, "label", label, "labelValue", labelValue)
 				return
 			}
 
 			for fileName, data := range cm.Data {
 				if !writer.IsJSON(fileName) {
+					l.Debug("ConfigMap file is not JSON:", "name", cm.Name, "fileName", fileName)
 					continue
 				}
 
 				folder := folder
 
 				if folderAnnotation != "" {
+					l.Debug("ConfigMap folder annotation:", "name", cm.Name, "folderAnnotation", folderAnnotation)
 					folder = path.Join(folder, cm.Annotations[folderAnnotation])
 				}
 
+				l.Debug("ConfigMap writing file:", "name", cm.Name, "fileName", fileName)
 				writer.Write(folder, fileName, data)
 			}
 			notifier.Notify()
@@ -274,12 +289,13 @@ func (c *Client) configMapInformerWorker(
 			cm := newObj.(*corev1.ConfigMap)
 
 			if !c.matchesLabel(cm.Labels, label, labelValue) {
-				log.Printf("ConfigMap %s does not match label %s=%s", cm.Name, label, labelValue)
+				l.Debug("ConfigMap does not match label:", "name", cm.Name, "label", label, "labelValue", labelValue)
 				return
 			}
 
 			for fileName, data := range cm.Data {
 				if !writer.IsJSON(fileName) {
+					l.Debug("ConfigMap file is not JSON:", "name", cm.Name, "fileName", fileName)
 					continue
 				}
 
@@ -289,6 +305,7 @@ func (c *Client) configMapInformerWorker(
 					folder = path.Join(folder, cm.Annotations[folderAnnotation])
 				}
 
+				l.Debug("ConfigMap updating file:", "name", cm.Name, "fileName", fileName)
 				writer.Write(folder, fileName, data)
 			}
 		},
@@ -296,12 +313,13 @@ func (c *Client) configMapInformerWorker(
 			cm := obj.(*corev1.ConfigMap)
 
 			if !c.matchesLabel(cm.Labels, label, labelValue) {
-				log.Printf("ConfigMap %s does not match label %s=%s", cm.Name, label, labelValue)
+				l.Debug("ConfigMap does not match label:", "name", cm.Name, "label", label, "labelValue", labelValue)
 				return
 			}
 
 			for fileName := range cm.Data {
 				if !writer.IsJSON(fileName) {
+					l.Debug("ConfigMap file is not JSON:", "name", cm.Name, "fileName", fileName)
 					continue
 				}
 
@@ -311,6 +329,7 @@ func (c *Client) configMapInformerWorker(
 					folder = path.Join(folder, cm.Annotations[folderAnnotation])
 				}
 
+				l.Debug("ConfigMap removing file:", "name", cm.Name, "fileName", fileName)
 				writer.Remove(folder, fileName)
 			}
 		},
@@ -362,21 +381,24 @@ func (c *Client) secretInformerWorker(
 		AddFunc: func(obj interface{}) {
 			secret := obj.(*corev1.Secret)
 			if !c.matchesLabel(secret.Labels, label, labelValue) {
-				log.Printf("Secret %s does not match label %s=%s", secret.Name, label, labelValue)
+				l.Debug("Secret does not match label:", "name", secret.Name, "label", label, "labelValue", labelValue)
 				return
 			}
 
 			for fileName, data := range secret.Data {
 				if !writer.IsJSON(fileName) {
+					l.Debug("Secret file is not JSON:", "name", secret.Name, "fileName", fileName)
 					continue
 				}
 
 				folder := folder
 
 				if folderAnnotation != "" {
+					l.Debug("Secret folder annotation:", "name", secret.Name, "folderAnnotation", folderAnnotation)
 					folder = path.Join(folder, secret.Annotations[folderAnnotation])
 				}
 
+				l.Debug("Secret writing file:", "name", secret.Name, "fileName", fileName)
 				writer.Write(folder, fileName, string(data))
 			}
 			notifier.Notify()
@@ -384,41 +406,47 @@ func (c *Client) secretInformerWorker(
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			secret := newObj.(*corev1.Secret)
 			if !c.matchesLabel(secret.Labels, label, labelValue) {
-				log.Printf("Secret %s does not match label %s=%s", secret.Name, label, labelValue)
+				l.Debug("Secret does not match label:", "name", secret.Name, "label", label, "labelValue", labelValue)
 				return
 			}
 
 			for fileName, data := range secret.Data {
 				if !writer.IsJSON(fileName) {
+					l.Debug("Secret file is not JSON:", "name", secret.Name, "fileName", fileName)
 					continue
 				}
 
 				folder := folder
 
 				if folderAnnotation != "" {
+					l.Debug("Secret folder annotation:", "name", secret.Name, "folderAnnotation", folderAnnotation)
 					folder = path.Join(folder, secret.Annotations[folderAnnotation])
 				}
 
+				l.Debug("Secret updating file:", "name", secret.Name, "fileName", fileName)
 				writer.Write(folder, fileName, string(data))
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			secret := obj.(*corev1.Secret)
 			if !c.matchesLabel(secret.Labels, label, labelValue) {
-				log.Printf("Secret %s does not match label %s=%s", secret.Name, label, labelValue)
+				l.Debug("Secret does not match label:", "name", secret.Name, "label", label, "labelValue", labelValue)
 				return
 			}
 			for fileName := range secret.Data {
 				if !writer.IsJSON(fileName) {
+					l.Debug("Secret file is not JSON:", "name", secret.Name, "fileName", fileName)
 					continue
 				}
 
 				folder := folder
 
 				if folderAnnotation != "" {
+					l.Debug("Secret folder annotation:", "name", secret.Name, "folderAnnotation", folderAnnotation)
 					folder = path.Join(folder, secret.Annotations[folderAnnotation])
 				}
 
+				l.Debug("Secret removing file:", "name", secret.Name, "fileName", fileName)
 				writer.Remove(folder, fileName)
 			}
 		},

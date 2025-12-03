@@ -6,6 +6,7 @@ import (
 	"k8s-gsidecar/notifier"
 	"k8s-gsidecar/writer"
 	"log"
+	"log/slog"
 	"os"
 	"path"
 	"strings"
@@ -78,7 +79,7 @@ type SideCar struct {
 func New(ctx context.Context) *SideCar {
 	client, err := kubernetes.NewClient(ctx)
 	if err != nil {
-		log.Fatalf("Failed to create Kubernetes client: %v", err)
+		l.Error("Failed to create Kubernetes client", "error", err)
 	}
 
 	resouce := os.Getenv(RESOURCE)
@@ -149,31 +150,32 @@ func New(ctx context.Context) *SideCar {
 }
 
 func (s *SideCar) Run() {
-	log.Println("Running SideCar with method:", s.Method)
+	l.Info("Running SideCar with method:", "method", s.Method)
 	switch s.Method {
 	case METHOD_WATCH, METHOD_SLEEP:
-		log.Println("Waiting for changes")
+		l.Info("Waiting for changes")
 		s.syncResources()
 
 		s.WaitForChanges()
 	case METHOD_LIST:
-		log.Println("Running once")
+		l.Info("Running once")
 		s.RunOnce()
 	default:
-		log.Fatalf("Invalid method: %s", s.Method)
+		l.Error("Invalid method:", "error", s.Method)
 	}
 }
 
 func (s *SideCar) syncResources() {
-	log.Println("Syncing resources")
+	l.Info("Syncing resources")
 	for _, resource := range s.Resource {
-		log.Println("Syncing resource:", resource)
+		l.Info("Syncing resource:", "resource", resource)
 		switch resource {
 		case RESOURCE_CONFIGMAP:
 			configMaps, err := s.client.GetConfigMaps(s.Namespaces, s.Label, s.LabelValue)
-			log.Println("Got ConfigMaps:", len(configMaps))
+			l.Info("Got ConfigMaps:", "count", len(configMaps))
 			if err != nil {
-				log.Fatalf("Failed to get ConfigMaps: %v", err)
+				l.Error("Failed to get ConfigMaps:", "error", err)
+				return
 			}
 
 			for _, configMap := range configMaps {
@@ -197,9 +199,10 @@ func (s *SideCar) syncResources() {
 
 		case RESOURCE_SECRET:
 			secrets, err := s.client.GetSecrets(s.Namespaces, s.Label, s.LabelValue)
-			log.Println("Got Secrets:", len(secrets))
+			l.Info("Got Secrets:", "count", len(secrets))
 			if err != nil {
-				log.Fatalf("Failed to get Secrets: %v", err)
+				l.Error("Failed to get Secrets:", "error", err)
+				return
 			}
 
 			for _, secret := range secrets {
@@ -217,7 +220,7 @@ func (s *SideCar) syncResources() {
 					// Secret.Data is []byte, convert to string
 					err = s.writer.Write(folder, fileName, string(data))
 					if err != nil {
-						log.Fatalf("Failed to write file: %v", err)
+						slog.Error("Failed to write file:", "error", err)
 					}
 				}
 			}
@@ -232,11 +235,10 @@ func (s *SideCar) RunOnce() {
 }
 
 func (s *SideCar) WaitForChanges() {
-	log.Println("Waiting for changes")
 
 	s.client.Wg = &sync.WaitGroup{}
 
-	log.Println("Adding workers for resources:", s.Resource)
+	l.Info("Start waiting for changes")
 
 	for _, resource := range s.Resource {
 		switch resource {
